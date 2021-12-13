@@ -1,7 +1,9 @@
+#include "graphics.h"
+
+
 int main(void) {
-    unsigned char a, b;
-    a = 2;
-    b = 3;
+    and_ppu_ctrl(0b00000000);
+    or_ppu_ctrl(0b10000000);
     while(1);
     return 0;
 }
