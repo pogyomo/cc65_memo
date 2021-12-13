@@ -1,6 +1,9 @@
+; vim: ft=ca65
 ; -------------------------------------------------------------------
 ; crt0.s
 ; -------------------------------------------------------------------
+
+
 
 
 ; -------------------------------------------------------------------
@@ -10,23 +13,29 @@
 
 .export   __STARTUP__ : absolute = 1
 .import   __STACK_START__, __STACK_SIZE__
+.import   NES_MAPPER, NES_PRG_BANKS, NES_CHR_BANKS, NES_MIRRORING
 
-.import   initlib, donelib, copydata
+.import   copydata
+.import   init_handler, end_handler, irq_handler, nmi_handler
 
 .include  "zeropage.inc"
 .include  "nes.inc"
+
+
 
 
 ; -------------------------------------------------------------------
 ; Header
 .segment "HEADER"
     .byte $4e, $45, $53, $1a
-    .byte 2
-    .byte 0
-    .byte 0
-    .byte 0
+    .byte <NES_PRG_BANKS
+    .byte <NES_CHR_BANKS
+    .byte <NES_MIRRORING | (<NES_MAPPER<<4)
+    .byte <NES_MAPPER & $f0
     .byte $00, $00, $00, $00
     .byte $00, $00, $00, $00
+
+
 
 
 ; -------------------------------------------------------------------
@@ -47,19 +56,11 @@ _init:
     sta PPUMASK   ; Disenable rendering
     sta DMCFREQ   ; Disenable dmc irq
 
-; Clear ram
-    txa           ; a = x = 0
-@clear_ram:
-    sta $0000, x
-    sta $0100, x
-    sta $0200, x
-    sta $0300, x
-    sta $0400, x
-    sta $0500, x
-    sta $0600, x
-    sta $0700, x
-    inx
-    bne @clear_ram
+; Init cc65 argument stack pointer
+    lda #<(__STACK_START__ + __STACK_SIZE__)
+    sta sp + 0
+    lda #>(__STACK_START__ + __STACK_SIZE__)
+    sta sp + 1
 
 ; Wait vblank twice
 @wait_vblank1:
@@ -69,30 +70,78 @@ _init:
     bit PPUSTATUS
     bpl @wait_vblank2
 
-; Init cc65 argument stack pointer
-    lda #<(__STACK_START__ + __STACK_SIZE__)
-    sta sp + 0
-    lda #>(__STACK_START__ + __STACK_SIZE__)
-    sta sp + 1
+; Copy data from rom to ram
+; Before use initlib or donelib, this should be called
+; because condes will be placed in data segment (see condes.s)
+    jsr copydata 
 
-; Init read/write data and use constructor
-; It may init mapper, driver or etc
-    jsr copydata ; Before use initlib or donelib, this should be called
-                 ; because condes will be placed in data segment (see condes.s)
-    jsr initlib
+; Use init_handler
+    jsr init_handler
 
 ; Call main()
     jsr _main
 
 _exit:
 
-; Exit from main and use destructor, then restart
-    jsr donelib ; Use destructor
-    jmp _init   ; Restart
+; Exit from main and use init_handler, then restart
+    jsr end_handler
+    jmp _init  
 
+
+
+
+; -------------------------------------------------------------------
+; NMI code
 _nmi:
-_irq:
+    
+; Escape a, x, y register
+    pha
+    tya
+    pha
+    txa
+    pha
+
+; Use nmi_handler
+    jsr nmi_handler
+
+; Restore a, x, y register
+    pla
+    tax
+    pla
+    tay
+    pla
+
+; End of nmi
     rti
+
+
+
+
+; -------------------------------------------------------------------
+; IRQ code
+_irq:
+    
+; Escape a, x, y register
+    pha
+    tya
+    pha
+    txa
+    pha
+
+; Use irq_handler
+    jsr irq_handler
+
+; Restore a, x, y register
+    pla
+    tax
+    pla
+    tay
+    pla
+
+; End of irq
+    rti
+
+
 
 
 ; -------------------------------------------------------------------
