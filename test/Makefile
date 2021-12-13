@@ -8,4 +8,7 @@ cp:
 	cc65 -t none --cpu 6502 -Oirs test/main.c
 	ca65 -t none test/main.s
 	ca65 -t none test/crt0.s
-	ld65 -C test/nrom.cfg test/main.o test/crt0.o none.lib test/nes.lib -o test/main.nes
+	ld65 -C test/nrom.cfg test/main.o test/crt0.o test/nes.lib -o test/main.nes
+
+cl:
+	rm -r test
